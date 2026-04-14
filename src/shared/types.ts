@@ -33,6 +33,19 @@ export interface AgentInfo {
   isLoaded: boolean
 }
 
+export interface RunHistoryEntry {
+  timestamp: string
+  event: string
+}
+
+export interface ServiceRunInfo {
+  state: string | null
+  runs: number | null
+  lastExitCode: string | null
+  pid: number | null
+  history: RunHistoryEntry[]
+}
+
 export interface LaunchdAPI {
   listAgents(): Promise<AgentInfo[]>
   readPlistRaw(path: string): Promise<string>
@@ -45,4 +58,5 @@ export interface LaunchdAPI {
   startAgent(label: string): Promise<void>
   stopAgent(label: string): Promise<void>
   revealInFinder(path: string): Promise<void>
+  getServiceRunInfo(label: string): Promise<ServiceRunInfo>
 }

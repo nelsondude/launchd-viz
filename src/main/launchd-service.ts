@@ -2,7 +2,18 @@ import { execSync } from 'child_process'
 import { readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { homedir } from 'os'
-import type { AgentInfo, AgentSource, AgentStatus, LaunchdPlist } from '../shared/types'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+import type {
+  AgentInfo,
+  AgentSource,
+  AgentStatus,
+  LaunchdPlist,
+  ServiceRunInfo,
+  RunHistoryEntry
+} from '../shared/types'
+
+const execFileAsync = promisify(execFile)
 
 const DIRECTORIES: Record<AgentSource, string> = {
   'user-agents': join(homedir(), 'Library/LaunchAgents'),
@@ -246,4 +257,104 @@ export function stopAgent(label: string): void {
   } catch {
     runCommand(`launchctl stop ${label}`)
   }
+}
+
+function parseLaunchctlPrint(output: string): Partial<ServiceRunInfo> {
+  const info: Partial<ServiceRunInfo> = {}
+
+  const stateMatch = output.match(/state\s*=\s*(.+)/)
+  if (stateMatch) info.state = stateMatch[1].trim()
+
+  const runsMatch = output.match(/runs\s*=\s*(\d+)/)
+  if (runsMatch) info.runs = parseInt(runsMatch[1], 10)
+
+  const exitMatch = output.match(/last exit code\s*=\s*(.+)/)
+  if (exitMatch) info.lastExitCode = exitMatch[1].trim()
+
+  const pidMatch = output.match(/pid\s*=\s*(\d+)/)
+  if (pidMatch) info.pid = parseInt(pidMatch[1], 10)
+
+  return info
+}
+
+function parseLogEntries(output: string, label: string): RunHistoryEntry[] {
+  const entries: RunHistoryEntry[] = []
+  const lines = output.trim().split('\n')
+  for (const line of lines) {
+    if (!line.trim() || line.startsWith('Timestamp') || line.startsWith('---')) continue
+    // syslog format: "2026-04-14 10:30:00.000000-0700 ... message"
+    const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\.\d+[+-]\d+\s+/)
+    if (!tsMatch) continue
+
+    const timestamp = tsMatch[1]
+    // Extract event type from the message
+    let event = 'activity'
+    const lower = line.toLowerCase()
+    if (lower.includes('spawn') || lower.includes('started')) {
+      event = 'started'
+    } else if (lower.includes('exit') || lower.includes('exited')) {
+      const codeMatch = line.match(/exit(?:ed)?\s*(?:with\s+)?(?:code\s+)?(\d+)/i)
+      event = codeMatch ? `exited (code ${codeMatch[1]})` : 'exited'
+    } else if (lower.includes('throttl')) {
+      event = 'throttled'
+    } else if (lower.includes('kill') || lower.includes('signal')) {
+      event = 'killed'
+    } else {
+      // Include a snippet of the message
+      const msgPart = line.substring(tsMatch[0].length).trim()
+      const labelIdx = msgPart.indexOf(label)
+      if (labelIdx >= 0) {
+        const after = msgPart.substring(labelIdx + label.length).trim().substring(0, 60)
+        event = after || 'activity'
+      }
+    }
+
+    entries.push({ timestamp, event })
+  }
+  return entries
+}
+
+export async function getServiceRunInfo(label: string): Promise<ServiceRunInfo> {
+  const uid = getUid()
+  const info: ServiceRunInfo = {
+    state: null,
+    runs: null,
+    lastExitCode: null,
+    pid: null,
+    history: []
+  }
+
+  // Get service info from launchctl print
+  try {
+    const output = execSync(`launchctl print gui/${uid}/${label}`, {
+      encoding: 'utf8',
+      timeout: 5000
+    })
+    Object.assign(info, parseLaunchctlPrint(output))
+  } catch {
+    // Service may not be loaded
+  }
+
+  // Get recent log entries
+  try {
+    const { stdout } = await execFileAsync(
+      'log',
+      [
+        'show',
+        '--predicate',
+        `process == "launchd" AND composedMessage CONTAINS "${label}"`,
+        '--style',
+        'syslog',
+        '--last',
+        '7d',
+        '--info'
+      ],
+      { encoding: 'utf8', timeout: 15000 }
+    )
+    info.history = parseLogEntries(stdout, label).slice(-50) // last 50 entries
+  } catch {
+    // log show may fail or timeout
+  }
+
+  return info
 }

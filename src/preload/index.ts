@@ -16,7 +16,8 @@ const launchdAPI = {
     ipcRenderer.invoke('launchd:unload', path, label),
   startAgent: (label: string) => ipcRenderer.invoke('launchd:start', label),
   stopAgent: (label: string) => ipcRenderer.invoke('launchd:stop', label),
-  revealInFinder: (path: string) => ipcRenderer.invoke('launchd:reveal', path)
+  revealInFinder: (path: string) => ipcRenderer.invoke('launchd:reveal', path),
+  getServiceRunInfo: (label: string) => ipcRenderer.invoke('launchd:run-info', label)
 }
 
 contextBridge.exposeInMainWorld('launchd', launchdAPI)

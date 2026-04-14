@@ -11,7 +11,9 @@ import {
   Textarea,
   Code,
   Divider,
-  Badge
+  Badge,
+  Loader,
+  Center
 } from '@mantine/core'
 import {
   IconPlayerPlay,
@@ -21,12 +23,14 @@ import {
   IconTrash,
   IconEdit,
   IconFolder,
-  IconDeviceFloppy
+  IconDeviceFloppy,
+  IconRefresh
 } from '@tabler/icons-react'
 import { modals } from '@mantine/modals'
 import { notifications } from '@mantine/notifications'
-import type { AgentInfo } from '../../../shared/types'
+import type { AgentInfo, ServiceRunInfo } from '../../../shared/types'
 import { StatusBadge } from './StatusBadge'
+import { formatSchedule } from '../utils/schedule'
 
 interface AgentDetailProps {
   agent: AgentInfo | null
@@ -39,6 +43,8 @@ export function AgentDetail({ agent, onClose, onEdit, onRefetch }: AgentDetailPr
   const [rawXml, setRawXml] = useState('')
   const [editingXml, setEditingXml] = useState(false)
   const [xmlContent, setXmlContent] = useState('')
+  const [runInfo, setRunInfo] = useState<ServiceRunInfo | null>(null)
+  const [runInfoLoading, setRunInfoLoading] = useState(false)
 
   useEffect(() => {
     if (agent) {
@@ -49,8 +55,20 @@ export function AgentDetail({ agent, onClose, onEdit, onRefetch }: AgentDetailPr
         }
       })
       setEditingXml(false)
+      setRunInfo(null)
     }
   }, [agent])
+
+  const fetchRunInfo = async () => {
+    if (!agent) return
+    setRunInfoLoading(true)
+    try {
+      const result = await window.launchd.getServiceRunInfo(agent.label)
+      if (result.data) setRunInfo(result.data)
+    } finally {
+      setRunInfoLoading(false)
+    }
+  }
 
   if (!agent) return null
 
@@ -115,6 +133,7 @@ export function AgentDetail({ agent, onClose, onEdit, onRefetch }: AgentDetailPr
           ? JSON.stringify(plist.KeepAlive)
           : 'No'
     ],
+    ['Schedule', formatSchedule(plist)],
     ['StartInterval', plist.StartInterval != null ? `${plist.StartInterval}s` : '–'],
     [
       'StartCalendarInterval',
@@ -259,6 +278,9 @@ export function AgentDetail({ agent, onClose, onEdit, onRefetch }: AgentDetailPr
         <Tabs defaultValue="config">
           <Tabs.List>
             <Tabs.Tab value="config">Configuration</Tabs.Tab>
+            <Tabs.Tab value="history" onClick={fetchRunInfo}>
+              Run History
+            </Tabs.Tab>
             <Tabs.Tab value="xml">XML</Tabs.Tab>
           </Tabs.List>
 
@@ -281,6 +303,120 @@ export function AgentDetail({ agent, onClose, onEdit, onRefetch }: AgentDetailPr
                 ))}
               </Table.Tbody>
             </Table>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="history" pt="md">
+            <Stack gap="md">
+              {runInfoLoading ? (
+                <Center h={200}>
+                  <Loader size="sm" />
+                </Center>
+              ) : runInfo ? (
+                <>
+                  <Table withTableBorder withColumnBorders>
+                    <Table.Tbody>
+                      <Table.Tr>
+                        <Table.Td w={140}>
+                          <Text size="sm" fw={600}>
+                            State
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge
+                            size="sm"
+                            color={
+                              runInfo.state === 'running'
+                                ? 'green'
+                                : runInfo.state === 'waiting'
+                                  ? 'yellow'
+                                  : 'gray'
+                            }
+                          >
+                            {runInfo.state ?? 'unknown'}
+                          </Badge>
+                        </Table.Td>
+                      </Table.Tr>
+                      <Table.Tr>
+                        <Table.Td>
+                          <Text size="sm" fw={600}>
+                            Total Runs
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm">{runInfo.runs ?? '–'}</Text>
+                        </Table.Td>
+                      </Table.Tr>
+                      <Table.Tr>
+                        <Table.Td>
+                          <Text size="sm" fw={600}>
+                            Last Exit Code
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm">{runInfo.lastExitCode ?? '–'}</Text>
+                        </Table.Td>
+                      </Table.Tr>
+                      <Table.Tr>
+                        <Table.Td>
+                          <Text size="sm" fw={600}>
+                            PID
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm">{runInfo.pid ?? '–'}</Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    </Table.Tbody>
+                  </Table>
+
+                  {runInfo.history.length > 0 ? (
+                    <>
+                      <Group justify="space-between">
+                        <Text size="sm" fw={600}>
+                          Recent Activity (last 7 days)
+                        </Text>
+                        <Button
+                          size="xs"
+                          variant="subtle"
+                          leftSection={<IconRefresh size={14} />}
+                          onClick={fetchRunInfo}
+                        >
+                          Refresh
+                        </Button>
+                      </Group>
+                      <Table withTableBorder withColumnBorders striped>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th>Timestamp</Table.Th>
+                            <Table.Th>Event</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {[...runInfo.history].reverse().map((entry, i) => (
+                            <Table.Tr key={i}>
+                              <Table.Td>
+                                <Code>{entry.timestamp}</Code>
+                              </Table.Td>
+                              <Table.Td>
+                                <Text size="sm">{entry.event}</Text>
+                              </Table.Td>
+                            </Table.Tr>
+                          ))}
+                        </Table.Tbody>
+                      </Table>
+                    </>
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      No recent activity found in system log.
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <Text size="sm" c="dimmed">
+                  Click the tab to load run history.
+                </Text>
+              )}
+            </Stack>
           </Tabs.Panel>
 
           <Tabs.Panel value="xml" pt="md">

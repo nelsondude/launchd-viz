@@ -1,4 +1,4 @@
-import type { AgentInfo, AgentSource, LaunchdPlist } from '../shared/types'
+import type { AgentInfo, AgentSource, LaunchdPlist, ServiceRunInfo } from '../shared/types'
 
 interface IpcResult<T> {
   data?: T
@@ -17,6 +17,7 @@ interface LaunchdBridge {
   startAgent(label: string): Promise<IpcResult<boolean>>
   stopAgent(label: string): Promise<IpcResult<boolean>>
   revealInFinder(path: string): Promise<IpcResult<boolean>>
+  getServiceRunInfo(label: string): Promise<IpcResult<ServiceRunInfo>>
 }
 
 declare global {

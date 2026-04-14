@@ -25,6 +25,7 @@ import { useState } from 'react'
 import type { AgentInfo, AgentSource } from '../../../shared/types'
 import { StatusBadge } from './StatusBadge'
 import { useAgents } from '../hooks/useAgents'
+import { formatSchedule } from '../utils/schedule'
 
 interface AgentListProps {
   onSelect: (agent: AgentInfo) => void
@@ -127,6 +128,7 @@ export function AgentList({ onSelect, refreshTrigger }: AgentListProps) {
             <Table.Th>Label</Table.Th>
             <Table.Th>PID</Table.Th>
             <Table.Th>Source</Table.Th>
+            <Table.Th>Schedule</Table.Th>
             <Table.Th>RunAtLoad</Table.Th>
             <Table.Th>KeepAlive</Table.Th>
             <Table.Th>Actions</Table.Th>
@@ -153,6 +155,11 @@ export function AgentList({ onSelect, refreshTrigger }: AgentListProps) {
               <Table.Td>
                 <Text size="xs" c="dimmed">
                   {sourceLabel(agent.source)}
+                </Text>
+              </Table.Td>
+              <Table.Td>
+                <Text size="xs" c="dimmed">
+                  {formatSchedule(agent.plist)}
                 </Text>
               </Table.Td>
               <Table.Td>

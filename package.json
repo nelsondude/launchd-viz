@@ -1,6 +1,6 @@
 {
   "name": "launchd-viz",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "macOS Launch Agent & Daemon Manager",
   "author": "nelsondude",
   "license": "MIT",

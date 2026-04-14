@@ -133,6 +133,15 @@ app.whenReady().then(() => {
     return { data: true }
   })
 
+  ipcMain.handle('launchd:run-info', async (_, label: string) => {
+    try {
+      const data = await launchd.getServiceRunInfo(label)
+      return { data }
+    } catch (e) {
+      return { error: (e as Error).message }
+    }
+  })
+
   createWindow()
 
   app.on('activate', () => {
