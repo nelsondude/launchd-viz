@@ -97,3 +97,36 @@ export function formatSchedule(plist: LaunchdPlist): string {
 
   return 'Manual'
 }
+
+export function scheduleTooltip(plist: LaunchdPlist): string | null {
+  const lines: string[] = []
+
+  if (plist.StartInterval != null) {
+    lines.push(`StartInterval: ${plist.StartInterval}s`)
+  }
+
+  if (plist.StartCalendarInterval) {
+    const entries = Array.isArray(plist.StartCalendarInterval)
+      ? plist.StartCalendarInterval
+      : [plist.StartCalendarInterval]
+    for (const entry of entries) {
+      lines.push(formatCalendarEntry(entry))
+    }
+  }
+
+  if (plist.RunAtLoad) lines.push('RunAtLoad: Yes')
+  if (plist.KeepAlive) {
+    lines.push(
+      typeof plist.KeepAlive === 'object'
+        ? `KeepAlive: ${JSON.stringify(plist.KeepAlive)}`
+        : 'KeepAlive: Yes'
+    )
+  }
+
+  if (plist.WatchPaths) {
+    const paths = plist.WatchPaths as string[]
+    lines.push(`WatchPaths: ${Array.isArray(paths) ? paths.join(', ') : String(paths)}`)
+  }
+
+  return lines.length > 0 ? lines.join('\n') : null
+}
