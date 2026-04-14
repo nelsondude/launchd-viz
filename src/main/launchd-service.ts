@@ -355,7 +355,7 @@ export async function getServiceRunInfo(label: string): Promise<ServiceRunInfo> 
   // backgroundtaskmanagementd, UserEventAgent, and other processes.
   try {
     const { stdout } = await execFileAsync(
-      'log',
+      '/usr/bin/log',
       [
         'show',
         '--predicate',
