@@ -277,39 +277,54 @@ function parseLaunchctlPrint(output: string): Partial<ServiceRunInfo> {
   return info
 }
 
-function parseLogEntries(output: string, label: string): RunHistoryEntry[] {
+function parseLogEntries(output: string, _label: string): RunHistoryEntry[] {
   const entries: RunHistoryEntry[] = []
   const lines = output.trim().split('\n')
   for (const line of lines) {
     if (!line.trim() || line.startsWith('Timestamp') || line.startsWith('---')) continue
-    // syslog format: "2026-04-14 10:30:00.000000-0700 ... message"
+    // syslog format: "2026-04-14 10:30:00.000000-0700  host process[pid]: message"
     const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\.\d+[+-]\d+\s+/)
     if (!tsMatch) continue
 
     const timestamp = tsMatch[1]
-    // Extract event type from the message
-    let event = 'activity'
-    const lower = line.toLowerCase()
+    const rest = line.substring(tsMatch[0].length).trim()
+
+    // Extract process name from "host process[pid]:" format
+    const procMatch = rest.match(/^\S+\s+(\S+)\[\d+\]:\s*(.*)/)
+    const processName = procMatch ? procMatch[1] : ''
+    const message = procMatch ? procMatch[2] : rest
+
+    // Classify event from the message content
+    let event: string
+    const lower = message.toLowerCase()
     if (lower.includes('spawn') || lower.includes('started')) {
       event = 'started'
     } else if (lower.includes('exit') || lower.includes('exited')) {
-      const codeMatch = line.match(/exit(?:ed)?\s*(?:with\s+)?(?:code\s+)?(\d+)/i)
+      const codeMatch = message.match(/exit(?:ed)?\s*(?:with\s+)?(?:code\s+)?(\d+)/i)
       event = codeMatch ? `exited (code ${codeMatch[1]})` : 'exited'
     } else if (lower.includes('throttl')) {
       event = 'throttled'
     } else if (lower.includes('kill') || lower.includes('signal')) {
       event = 'killed'
+    } else if (lower.includes('registerlaunchitem')) {
+      event = 'registered'
+    } else if (lower.includes('bootstrap')) {
+      event = 'bootstrapped'
+    } else if (lower.includes('bootout') || lower.includes('unload')) {
+      event = 'unloaded'
+    } else if (lower.includes('fsevent') || lower.includes('fsevents')) {
+      event = 'plist changed'
+    } else if (lower.includes('kickstart')) {
+      event = 'kicked start'
     } else {
-      // Include a snippet of the message
-      const msgPart = line.substring(tsMatch[0].length).trim()
-      const labelIdx = msgPart.indexOf(label)
-      if (labelIdx >= 0) {
-        const after = msgPart.substring(labelIdx + label.length).trim().substring(0, 60)
-        event = after || 'activity'
-      }
+      // Use a truncated snippet of the message as the event
+      const snippet = message.substring(0, 80).replace(/\s+/g, ' ').trim()
+      event = snippet || 'activity'
     }
 
-    entries.push({ timestamp, event })
+    // Add process context for clarity
+    const source = processName && processName !== 'launchd' ? ` (${processName})` : ''
+    entries.push({ timestamp, event: event + source })
   }
   return entries
 }
@@ -335,20 +350,20 @@ export async function getServiceRunInfo(label: string): Promise<ServiceRunInfo> 
     // Service may not be loaded
   }
 
-  // Get recent log entries — use 1d window to keep the query fast.
-  // Broaden the predicate: launchd activity can appear under multiple processes
-  // and subsystems, so match on composedMessage across all sources.
+  // Get recent log entries — use 1h window to keep the query fast.
+  // Don't filter by process — launchd activity shows up under
+  // backgroundtaskmanagementd, UserEventAgent, and other processes.
   try {
     const { stdout } = await execFileAsync(
       'log',
       [
         'show',
         '--predicate',
-        `composedMessage CONTAINS "${label}" AND (process == "launchd" OR subsystem == "com.apple.xpc.launchd")`,
+        `composedMessage CONTAINS "${label}"`,
         '--style',
         'syslog',
         '--last',
-        '1d',
+        '1h',
         '--info',
         '--debug'
       ],
