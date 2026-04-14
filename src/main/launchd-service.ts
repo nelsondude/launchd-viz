@@ -335,19 +335,22 @@ export async function getServiceRunInfo(label: string): Promise<ServiceRunInfo> 
     // Service may not be loaded
   }
 
-  // Get recent log entries — use 1d window to keep the query fast
+  // Get recent log entries — use 1d window to keep the query fast.
+  // Broaden the predicate: launchd activity can appear under multiple processes
+  // and subsystems, so match on composedMessage across all sources.
   try {
     const { stdout } = await execFileAsync(
       'log',
       [
         'show',
         '--predicate',
-        `process == "launchd" AND composedMessage CONTAINS "${label}"`,
+        `composedMessage CONTAINS "${label}" AND (process == "launchd" OR subsystem == "com.apple.xpc.launchd")`,
         '--style',
         'syslog',
         '--last',
         '1d',
-        '--info'
+        '--info',
+        '--debug'
       ],
       { encoding: 'utf8', timeout: 10000, maxBuffer: 2 * 1024 * 1024 }
     )
