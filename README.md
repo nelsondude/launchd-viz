@@ -14,6 +14,9 @@ A native macOS app for viewing, managing, and editing launch agents and daemons.
 - View and edit plist files (both structured form and raw XML)
 - Create new launch agents with a guided form
 - Delete agents you no longer need
+- **Run history** — see service state, run count, last exit code, and recent system log activity
+- **Human-readable schedules** — `StartInterval` and `StartCalendarInterval` shown as "Every 5 min", "Daily 3:00 AM", etc.
+- Sortable table columns
 - Dark mode support
 
 ## Install
@@ -81,12 +84,12 @@ src/
 Releases are automated via GitHub Actions. To publish a new version:
 
 1. Bump the version in `package.json`
-2. Commit and tag:
+2. Commit and push to `main`
+3. Create a release:
    ```bash
-   git tag v1.1.0
-   git push origin main --tags
+   gh release create v1.2.0 --generate-notes
    ```
-3. The workflow builds a universal `.dmg`, creates a GitHub Release, and auto-updates the [Homebrew tap](https://github.com/nelsondude/homebrew-tap)
+4. The workflow builds a universal `.dmg`, attaches it to the release, and auto-updates the [Homebrew tap](https://github.com/nelsondude/homebrew-tap)
 
 ## License
 
