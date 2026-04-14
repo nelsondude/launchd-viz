@@ -335,7 +335,7 @@ export async function getServiceRunInfo(label: string): Promise<ServiceRunInfo> 
     // Service may not be loaded
   }
 
-  // Get recent log entries
+  // Get recent log entries — use 1d window to keep the query fast
   try {
     const { stdout } = await execFileAsync(
       'log',
@@ -346,14 +346,14 @@ export async function getServiceRunInfo(label: string): Promise<ServiceRunInfo> 
         '--style',
         'syslog',
         '--last',
-        '7d',
+        '1d',
         '--info'
       ],
-      { encoding: 'utf8', timeout: 15000 }
+      { encoding: 'utf8', timeout: 10000, maxBuffer: 2 * 1024 * 1024 }
     )
     info.history = parseLogEntries(stdout, label).slice(-50) // last 50 entries
   } catch {
-    // log show may fail or timeout
+    // log show may fail or timeout — still return the launchctl print data
   }
 
   return info

@@ -373,7 +373,7 @@ export function AgentDetail({ agent, onClose, onEdit, onRefetch }: AgentDetailPr
                     <>
                       <Group justify="space-between">
                         <Text size="sm" fw={600}>
-                          Recent Activity (last 7 days)
+                          Recent Activity (last 24 hours)
                         </Text>
                         <Button
                           size="xs"
