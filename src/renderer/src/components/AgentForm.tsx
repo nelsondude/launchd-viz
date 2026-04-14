@@ -10,7 +10,9 @@ import {
   Group,
   Select,
   ActionIcon,
-  Text
+  Text,
+  SegmentedControl,
+  Paper
 } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { IconPlus, IconTrash } from '@tabler/icons-react'
@@ -24,12 +26,32 @@ interface AgentFormProps {
   editAgent?: AgentInfo | null
 }
 
+type ScheduleType = 'none' | 'interval' | 'calendar'
+
+interface CalendarEntry {
+  Month: number | ''
+  Day: number | ''
+  Weekday: number | ''
+  Hour: number | ''
+  Minute: number | ''
+}
+
+const EMPTY_CALENDAR_ENTRY: CalendarEntry = {
+  Month: '',
+  Day: '',
+  Weekday: '',
+  Hour: '',
+  Minute: ''
+}
+
 interface FormValues {
   Label: string
   ProgramArguments: string
   RunAtLoad: boolean
   KeepAlive: boolean
+  scheduleType: ScheduleType
   StartInterval: number | ''
+  calendarIntervals: CalendarEntry[]
   StandardOutPath: string
   StandardErrorPath: string
   WorkingDirectory: string
@@ -37,14 +59,34 @@ interface FormValues {
   source: AgentSource
 }
 
+function calendarFromPlist(
+  sci: Record<string, number> | Record<string, number>[] | undefined
+): CalendarEntry[] {
+  if (!sci) return [{ ...EMPTY_CALENDAR_ENTRY }]
+  const entries = Array.isArray(sci) ? sci : [sci]
+  return entries.map((e) => ({
+    Month: e.Month ?? '',
+    Day: e.Day ?? '',
+    Weekday: e.Weekday ?? '',
+    Hour: e.Hour ?? '',
+    Minute: e.Minute ?? ''
+  }))
+}
+
 function plistToForm(agent: AgentInfo): FormValues {
   const p = agent.plist
+  let scheduleType: ScheduleType = 'none'
+  if (p.StartInterval) scheduleType = 'interval'
+  else if (p.StartCalendarInterval) scheduleType = 'calendar'
+
   return {
     Label: p.Label,
     ProgramArguments: p.ProgramArguments?.join('\n') ?? p.Program ?? '',
     RunAtLoad: p.RunAtLoad ?? false,
     KeepAlive: p.KeepAlive === true,
+    scheduleType,
     StartInterval: p.StartInterval ?? '',
+    calendarIntervals: calendarFromPlist(p.StartCalendarInterval),
     StandardOutPath: p.StandardOutPath ?? '',
     StandardErrorPath: p.StandardErrorPath ?? '',
     WorkingDirectory: p.WorkingDirectory ?? '',
@@ -69,7 +111,28 @@ function formToPlist(values: FormValues): LaunchdPlist {
 
   if (values.RunAtLoad) plist.RunAtLoad = true
   if (values.KeepAlive) plist.KeepAlive = true
-  if (values.StartInterval) plist.StartInterval = Number(values.StartInterval)
+
+  if (values.scheduleType === 'interval' && values.StartInterval) {
+    plist.StartInterval = Number(values.StartInterval)
+  } else if (values.scheduleType === 'calendar') {
+    const intervals = values.calendarIntervals
+      .map((entry) => {
+        const obj: Record<string, number> = {}
+        if (entry.Month !== '') obj.Month = Number(entry.Month)
+        if (entry.Day !== '') obj.Day = Number(entry.Day)
+        if (entry.Weekday !== '') obj.Weekday = Number(entry.Weekday)
+        if (entry.Hour !== '') obj.Hour = Number(entry.Hour)
+        if (entry.Minute !== '') obj.Minute = Number(entry.Minute)
+        return obj
+      })
+      .filter((obj) => Object.keys(obj).length > 0)
+    if (intervals.length === 1) {
+      plist.StartCalendarInterval = intervals[0]
+    } else if (intervals.length > 1) {
+      plist.StartCalendarInterval = intervals
+    }
+  }
+
   if (values.StandardOutPath) plist.StandardOutPath = values.StandardOutPath
   if (values.StandardErrorPath) plist.StandardErrorPath = values.StandardErrorPath
   if (values.WorkingDirectory) plist.WorkingDirectory = values.WorkingDirectory
@@ -87,7 +150,9 @@ const EMPTY_VALUES: FormValues = {
   ProgramArguments: '',
   RunAtLoad: false,
   KeepAlive: false,
+  scheduleType: 'none',
   StartInterval: '',
+  calendarIntervals: [{ ...EMPTY_CALENDAR_ENTRY }],
   StandardOutPath: '',
   StandardErrorPath: '',
   WorkingDirectory: '',
@@ -107,13 +172,12 @@ export function AgentForm({ opened, onClose, onRefetch, editAgent }: AgentFormPr
   })
 
   // Reinitialize form when editAgent changes or modal opens
+  // Use setValues + resetDirty instead of initialize (which is idempotent)
   useEffect(() => {
     if (opened) {
-      if (editAgent) {
-        form.initialize(plistToForm(editAgent))
-      } else {
-        form.initialize(EMPTY_VALUES)
-      }
+      const vals = editAgent ? plistToForm(editAgent) : EMPTY_VALUES
+      form.setValues(vals)
+      form.resetDirty(vals)
     }
   }, [opened, editAgent])
 
@@ -204,12 +268,107 @@ export function AgentForm({ opened, onClose, onRefetch, editAgent }: AgentFormPr
             <Switch label="Keep Alive" {...form.getInputProps('KeepAlive', { type: 'checkbox' })} />
           </Group>
 
-          <NumberInput
-            label="Start Interval (seconds)"
-            placeholder="e.g. 300 for every 5 minutes"
-            min={0}
-            {...form.getInputProps('StartInterval')}
-          />
+          {/* Schedule */}
+          <Stack gap="xs">
+            <Text size="sm" fw={500}>
+              Schedule
+            </Text>
+            <SegmentedControl
+              data={[
+                { label: 'None', value: 'none' },
+                { label: 'Interval', value: 'interval' },
+                { label: 'Calendar', value: 'calendar' }
+              ]}
+              {...form.getInputProps('scheduleType')}
+            />
+
+            {form.values.scheduleType === 'interval' && (
+              <NumberInput
+                label="Start Interval (seconds)"
+                placeholder="e.g. 300 for every 5 minutes"
+                min={1}
+                {...form.getInputProps('StartInterval')}
+              />
+            )}
+
+            {form.values.scheduleType === 'calendar' && (
+              <Paper withBorder p="sm">
+                <Stack gap="xs">
+                  <Group justify="space-between">
+                    <Text size="xs" c="dimmed">
+                      Leave fields blank to match any value
+                    </Text>
+                    <ActionIcon
+                      size="sm"
+                      variant="light"
+                      onClick={() =>
+                        form.insertListItem('calendarIntervals', { ...EMPTY_CALENDAR_ENTRY })
+                      }
+                    >
+                      <IconPlus size={14} />
+                    </ActionIcon>
+                  </Group>
+                  {form.values.calendarIntervals.map((_, idx) => (
+                    <Paper key={idx} withBorder p="xs">
+                      <Group gap="xs" align="flex-end">
+                        <NumberInput
+                          label="Month"
+                          placeholder="1-12"
+                          min={1}
+                          max={12}
+                          style={{ flex: 1 }}
+                          {...form.getInputProps(`calendarIntervals.${idx}.Month`)}
+                        />
+                        <NumberInput
+                          label="Day"
+                          placeholder="1-31"
+                          min={1}
+                          max={31}
+                          style={{ flex: 1 }}
+                          {...form.getInputProps(`calendarIntervals.${idx}.Day`)}
+                        />
+                        <NumberInput
+                          label="Weekday"
+                          placeholder="0-7"
+                          description="0,7=Sun"
+                          min={0}
+                          max={7}
+                          style={{ flex: 1 }}
+                          {...form.getInputProps(`calendarIntervals.${idx}.Weekday`)}
+                        />
+                        <NumberInput
+                          label="Hour"
+                          placeholder="0-23"
+                          min={0}
+                          max={23}
+                          style={{ flex: 1 }}
+                          {...form.getInputProps(`calendarIntervals.${idx}.Hour`)}
+                        />
+                        <NumberInput
+                          label="Minute"
+                          placeholder="0-59"
+                          min={0}
+                          max={59}
+                          style={{ flex: 1 }}
+                          {...form.getInputProps(`calendarIntervals.${idx}.Minute`)}
+                        />
+                        {form.values.calendarIntervals.length > 1 && (
+                          <ActionIcon
+                            color="red"
+                            variant="subtle"
+                            size="sm"
+                            onClick={() => form.removeListItem('calendarIntervals', idx)}
+                          >
+                            <IconTrash size={14} />
+                          </ActionIcon>
+                        )}
+                      </Group>
+                    </Paper>
+                  ))}
+                </Stack>
+              </Paper>
+            )}
+          </Stack>
 
           <TextInput
             label="Working Directory"
