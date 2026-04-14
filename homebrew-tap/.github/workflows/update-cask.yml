@@ -16,6 +16,7 @@ jobs:
       - name: Update Cask formula
         run: |
           VERSION="${{ github.event.client_payload.version }}"
+          VERSION="${VERSION#v}"
           SHA256="${{ github.event.client_payload.sha256 }}"
 
           sed -i "s/version \".*\"/version \"${VERSION}\"/" Casks/launchd-viz.rb
@@ -26,5 +27,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Casks/launchd-viz.rb
-          git commit -m "Update launchd-viz to v${{ github.event.client_payload.version }}"
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "Update launchd-viz to ${VERSION}"
           git push
