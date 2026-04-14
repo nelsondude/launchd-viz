@@ -1,0 +1,77 @@
+{
+  "name": "launchd-viz",
+  "version": "1.0.0",
+  "description": "macOS Launch Agent & Daemon Manager",
+  "author": "nelsondude",
+  "license": "MIT",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "dist": "electron-vite build && electron-builder --mac",
+    "dist:unsigned": "electron-vite build && electron-builder --mac -c.mac.identity=null"
+  },
+  "build": {
+    "appId": "com.nelsondude.launchd-viz",
+    "productName": "Launchd Viz",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "notarize": false
+    },
+    "dmg": {
+      "title": "Launchd Viz ${version}",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "@mantine/core": "^7.17.8",
+    "@mantine/form": "^7.17.8",
+    "@mantine/hooks": "^7.17.8",
+    "@mantine/modals": "^7.17.8",
+    "@mantine/notifications": "^7.17.8",
+    "@tabler/icons-react": "^3.30.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@electron-toolkit/utils": "^4.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "electron": "^35.0.0",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^3.0.0",
+    "postcss": "^8.5.0",
+    "postcss-preset-mantine": "^1.17.0",
+    "postcss-simple-vars": "^7.0.1",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and package
+        run: npm run dist:unsigned
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload .dmg to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.dmg
+          draft: true
+          generate_release_notes: true
+
+  update-tap:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get release info
+        id: release
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for release assets
+        run: sleep 30
+
+      - name: Download .dmg and compute sha256
+        id: sha
+        run: |
+          VERSION=${{ steps.release.outputs.version }}
+          curl -fsSL -o launchd-viz.dmg \
+            "https://github.com/nelsondude/launchd-viz/releases/download/v${VERSION}/Launchd%20Viz-${VERSION}-universal.dmg"
+          SHA=$(shasum -a 256 launchd-viz.dmg | awk '{print $1}')
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Update Homebrew tap
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          repository: nelsondude/homebrew-tap
+          event-type: update-cask
+          client-payload: |
+            {
+              "version": "${{ steps.release.outputs.version }}",
+              "sha256": "${{ steps.sha.outputs.sha256 }}"
+            }
