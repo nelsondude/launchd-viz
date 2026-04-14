@@ -45,6 +45,7 @@ jobs:
           event-type: update-cask
           client-payload: |
             {
+              "cask": "launchd-viz",
               "version": "${{ github.ref_name }}",
               "sha256": "${{ steps.sha.outputs.sha256 }}"
             }
