@@ -15,6 +15,8 @@ import type {
 
 const execFileAsync = promisify(execFile)
 
+
+
 const DIRECTORIES: Record<AgentSource, string> = {
   'user-agents': join(homedir(), 'Library/LaunchAgents'),
   'system-agents': '/Library/LaunchAgents',
@@ -367,9 +369,9 @@ export async function getServiceRunInfo(label: string): Promise<ServiceRunInfo> 
         '--info',
         '--debug'
       ],
-      { encoding: 'utf8', timeout: 10000, maxBuffer: 2 * 1024 * 1024 }
+      { encoding: 'utf8', timeout: 15000, maxBuffer: 4 * 1024 * 1024 }
     )
-    info.history = parseLogEntries(stdout, label).slice(-50) // last 50 entries
+    info.history = parseLogEntries(stdout, label).slice(-50)
   } catch {
     // log show may fail or timeout — still return the launchctl print data
   }
